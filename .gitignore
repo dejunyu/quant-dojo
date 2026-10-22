@@ -51,8 +51,10 @@ node_modules/
 # -----------------------------------------------------------------------------
 storage/
 !.gitkeep
-data/
-datasets/
+# ⚠️ 只忽略仓库根目录下的数据目录；写成 `data/` 会把源码包
+#    engine/qd/data/ 一起忽略掉（曾导致 CI 上 ModuleNotFoundError: qd.data）
+/data/
+/datasets/
 *.parquet
 *.feather
 *.h5
