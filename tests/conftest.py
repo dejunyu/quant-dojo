@@ -1,15 +1,13 @@
 """pytest 共享 fixture."""
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from qd.data.synthetic import generate_demo_market, generate_random_walk_market  # noqa: E402
-from qd.data.market import MarketData  # noqa: E402
+# 刻意**不**把 engine/ 加进 sys.path：测试应当从「已安装的包」导入 qd。
+# 之前这里有一行 sys.path.insert，它会掩盖打包配置的错误——
+# 本地怎么跑都绿，CI 从干净 clone 安装后却必然失败。
+from qd.data.synthetic import generate_demo_market, generate_random_walk_market
+from qd.data.market import MarketData
 
 
 @pytest.fixture(scope="session")

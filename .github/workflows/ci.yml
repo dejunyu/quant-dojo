@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # 允许把 CI 诊断报告推回 ci-report 分支
+  contents: read
 
 jobs:
   test:
@@ -28,116 +28,66 @@ jobs:
 
       - name: Install dependencies
         # 关键：以「真实用户」的方式安装项目本身（pip install -e .），
-        # 而不是只装 requirements.txt。这样才能真正验证打包配置是否正确。
+        # 而不是只装 requirements.txt。否则打包配置的问题会被
+        # pytest.ini 里的 pythonpath 掩盖掉（这正是之前 CI 一直红的原因）。
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .
 
-      - name: 验证安装（不是靠 PYTHONPATH）
+      - name: 验证安装（从仓库外导入，确保用的是已安装的包）
         run: |
-          cd /tmp   # 换一个目录，确保 import 来自已安装的包而非当前工作目录
+          cd /tmp
           python -c "import qd, qd.data, qd.factors, qd.backtest, qd.research, qd.metrics, qd.optimize, qd.strategy, qd.live, qd.tutor; print('qd', qd.__version__, 'installed OK')"
-          qd lessons | head -3
+          qd lessons | head -4
 
-      - name: 显示环境信息（便于排查平台差异）
-        run: |
-          python -V
-          python -c "import numpy,pandas,scipy,sklearn,sys;print('numpy',numpy.__version__);print('pandas',pandas.__version__);print('scipy',scipy.__version__);print('sklearn',sklearn.__version__);print(sys.platform)"
-          pip list
+      - name: 1/7 数据层
+        run: pytest tests/test_data.py -v --tb=short
 
-      # 拆分执行：GitHub 的失败日志需要仓库管理员权限才能下载，
-      # 拆成多个步骤后，从 "哪个步骤变红" 就能直接定位是哪个测试文件失败。
-      - name: 1/6 数据层
-        # 每个测试单独跑：某条失败不会中断后续，从步骤红绿即可看出是哪一条
-        run: |
-          for t in $(pytest tests/test_data.py --collect-only -q | grep '::'); do
-            echo "::group::$t"
-            pytest "$t" -v --tb=short || echo "### FAILED: $t"
-            echo "::endgroup::"
-          done
-          pytest tests/test_data.py -v --tb=short
-
-      - name: 2/6 因子层
+      - name: 2/7 因子层
         run: pytest tests/test_factors.py -v --tb=short
 
-      - name: 3/6 回测与绩效
+      - name: 3/7 回测与绩效
         run: pytest tests/test_backtest.py -v --tb=short
 
-      - name: 4/6 研究与优化
+      - name: 4/7 研究与优化
         run: pytest tests/test_research.py -v --tb=short
 
-      - name: 5/6 API 与实盘
+      - name: 5/7 API 与实盘
         run: pytest tests/test_api.py -v --tb=short
 
-      - name: 6/6 无前视偏差证明
+      - name: 6/7 无前视偏差证明
         run: pytest tests/test_no_lookahead.py -v --tb=short
 
-      - name: 教材一致性（71 个课程代码块必须全部真实执行通过）
-        run: pytest tests/test_docs.py -v
+      - name: 7/7 教材一致性（课程代码块必须全部真实执行通过）
+        run: pytest tests/test_docs.py -v --tb=short
 
-      - name: 命令行全流程自检
+      - name: 命令行自检
         run: |
-          export PYTHONPATH=engine
-          python -m qd lessons --detail | head -20
-          python -m qd factor mom_12_1 --report | head -40
+          qd factor mom_12_1 --report | head -30
+          qd backtest dual_momentum | head -12
 
-      - name: 诊断报告（总是执行）
-        if: always()
+      - name: 失败诊断（始终执行，便于排查）
+        if: failure()
         run: |
           {
-            echo "## 环境"
+            echo "== python =="
             python -V
-            uname -a
-            echo
-            echo "## 包安装情况"
-            pip show quant-dojo 2>&1 | head -8
-            echo "--- qd 模块位置（从 /tmp 导入）---"
-            (cd /tmp && python -c "import qd; print(qd.__file__)")
-            echo "--- qd 子包 ---"
-            (cd /tmp && python -c "import qd.data; print('qd.data OK', qd.data.__file__)" || true)
-            echo "--- site-packages 里的 qd 相关文件 ---"
-            python -c "import sysconfig;print(sysconfig.get_paths()['purelib'])" | xargs -I{} sh -c 'ls -la {}/ | grep -i -E "quant|qd" || true'
-            echo "--- editable 钩子内容 ---"
-            for f in $(python -c "import sysconfig;print(sysconfig.get_paths()['purelib'])" | xargs -I{} sh -c 'ls {}/__editable__* 2>/dev/null'); do echo "== $f"; head -40 "$f"; done
-            echo "--- 实际的 data 目录内容 ---"
-            ls -la engine/qd/data/ 2>&1 | head -10
-            echo "--- 直接 import 试探 ---"
-            (cd /tmp && python -c "
-import qd, os, importlib
-d = os.path.dirname(qd.__file__)
-print('qd.__path__ =', qd.__path__)
-import importlib.util as u
-spec = u.find_spec('qd.data')
-print('find_spec qd.data ->', spec)
-for name in ['data','factors','backtest']:
-    try:
-        m = importlib.import_module('qd.'+name)
-        print('OK  qd.'+name)
-    except Exception as e:
-        print('ERR qd.'+name, type(e).__name__, e)
-" || true)
-            echo "--- qd 包的顶层目录 ---"
-            (cd /tmp && python -c "import qd,os; d=os.path.dirname(qd.__file__); print(d); print(sorted(os.listdir(d)))" || true)
-            echo
-            echo "## 依赖版本"
-            python -c "import numpy,pandas,scipy;print('numpy',numpy.__version__,'pandas',pandas.__version__,'scipy',scipy.__version__)"
-            echo
-            echo "## 数据层逐条结果"
-            pytest tests/test_data.py -v --tb=long 2>&1 | tail -80
-          } > diagnostic.txt 2>&1 || true
-          cat diagnostic.txt
+            echo "== platform =="
+            python -c "import sys; print(sys.platform)"
+            echo "== versions =="
+            pip list 2>/dev/null | grep -iE "numpy|pandas|scipy|scikit|pyarrow|fastapi|pytest"
+            echo "== qd location =="
+            cd /tmp && python -c "import qd; print(qd.__file__)"
+            echo "== failing test (full traceback) =="
+            pytest tests/ --ignore=tests/test_docs.py -x --tb=long 2>&1 | tail -60
+          } > ci-diagnostic.txt 2>&1 || true
+          cat ci-diagnostic.txt
 
-      # 仅在 3.12 上把报告推回仓库的一个独立分支，便于本地查看
-      # （GitHub 的日志与 artifact 下载都需要管理员权限，这里绕开）
-      - name: 把诊断报告推回 ci-report 分支
-        if: always() && matrix.python-version == '3.12'
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git checkout --orphan ci-report-$(date +%s) 2>/dev/null || true
-          git rm -rf --cached . >/dev/null 2>&1 || true
-          git add -f diagnostic.txt
-          git commit -m "ci diagnostic report" >/dev/null
-          git push -f origin HEAD:ci-report
+      - name: 上传失败诊断
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostic-py${{ matrix.python-version }}
+          path: ci-diagnostic.txt
+          if-no-files-found: ignore
