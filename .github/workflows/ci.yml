@@ -90,6 +90,13 @@ jobs:
             python -V
             uname -a
             echo
+            echo "## 包安装情况"
+            pip show quant-dojo 2>&1 | head -8
+            echo "--- qd 模块位置（从 /tmp 导入）---"
+            (cd /tmp && python -c "import qd; print(qd.__file__)")
+            echo "--- qd 子包 ---"
+            (cd /tmp && python -c "import qd.data; print('qd.data OK', qd.data.__file__)")
+            echo
             echo "## 依赖版本"
             python -c "import numpy,pandas,scipy;print('numpy',numpy.__version__,'pandas',pandas.__version__,'scipy',scipy.__version__)"
             echo
