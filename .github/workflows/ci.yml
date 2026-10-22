@@ -27,9 +27,18 @@ jobs:
           cache: pip
 
       - name: Install dependencies
+        # 关键：以「真实用户」的方式安装项目本身（pip install -e .），
+        # 而不是只装 requirements.txt。这样才能真正验证打包配置是否正确。
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -e .
+
+      - name: 验证安装（不是靠 PYTHONPATH）
+        run: |
+          cd /tmp   # 换一个目录，确保 import 来自已安装的包而非当前工作目录
+          python -c "import qd, qd.data, qd.factors, qd.backtest, qd.research, qd.metrics, qd.optimize, qd.strategy, qd.live, qd.tutor; print('qd', qd.__version__, 'installed OK')"
+          qd lessons | head -3
 
       - name: 显示环境信息（便于排查平台差异）
         run: |
