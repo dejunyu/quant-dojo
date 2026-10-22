@@ -95,7 +95,13 @@ jobs:
             echo "--- qd 模块位置（从 /tmp 导入）---"
             (cd /tmp && python -c "import qd; print(qd.__file__)")
             echo "--- qd 子包 ---"
-            (cd /tmp && python -c "import qd.data; print('qd.data OK', qd.data.__file__)")
+            (cd /tmp && python -c "import qd.data; print('qd.data OK', qd.data.__file__)" || true)
+            echo "--- site-packages 里的 qd 相关文件 ---"
+            python -c "import sysconfig;print(sysconfig.get_paths()['purelib'])" | xargs -I{} sh -c 'ls -la {}/ | grep -i -E "quant|qd" || true'
+            echo "--- editable 钩子内容 ---"
+            for f in $(python -c "import sysconfig;print(sysconfig.get_paths()['purelib'])" | xargs -I{} sh -c 'ls {}/__editable__* 2>/dev/null'); do echo "== $f"; head -40 "$f"; done
+            echo "--- qd 包的顶层目录 ---"
+            (cd /tmp && python -c "import qd,os; d=os.path.dirname(qd.__file__); print(d); print(sorted(os.listdir(d)))" || true)
             echo
             echo "## 依赖版本"
             python -c "import numpy,pandas,scipy;print('numpy',numpy.__version__,'pandas',pandas.__version__,'scipy',scipy.__version__)"
