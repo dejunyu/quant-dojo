@@ -100,6 +100,23 @@ jobs:
             python -c "import sysconfig;print(sysconfig.get_paths()['purelib'])" | xargs -I{} sh -c 'ls -la {}/ | grep -i -E "quant|qd" || true'
             echo "--- editable 钩子内容 ---"
             for f in $(python -c "import sysconfig;print(sysconfig.get_paths()['purelib'])" | xargs -I{} sh -c 'ls {}/__editable__* 2>/dev/null'); do echo "== $f"; head -40 "$f"; done
+            echo "--- 实际的 data 目录内容 ---"
+            ls -la engine/qd/data/ 2>&1 | head -10
+            echo "--- 直接 import 试探 ---"
+            (cd /tmp && python -c "
+import qd, os, importlib
+d = os.path.dirname(qd.__file__)
+print('qd.__path__ =', qd.__path__)
+import importlib.util as u
+spec = u.find_spec('qd.data')
+print('find_spec qd.data ->', spec)
+for name in ['data','factors','backtest']:
+    try:
+        m = importlib.import_module('qd.'+name)
+        print('OK  qd.'+name)
+    except Exception as e:
+        print('ERR qd.'+name, type(e).__name__, e)
+" || true)
             echo "--- qd 包的顶层目录 ---"
             (cd /tmp && python -c "import qd,os; d=os.path.dirname(qd.__file__); print(d); print(sorted(os.listdir(d)))" || true)
             echo
