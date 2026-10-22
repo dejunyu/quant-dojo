@@ -69,3 +69,26 @@ jobs:
           export PYTHONPATH=engine
           python -m qd lessons --detail | head -20
           python -m qd factor mom_12_1 --report | head -40
+
+      - name: 诊断报告（总是执行）
+        if: always()
+        run: |
+          {
+            echo "## 环境"
+            python -V
+            uname -a
+            echo
+            echo "## 依赖版本"
+            python -c "import numpy,pandas,scipy;print('numpy',numpy.__version__,'pandas',pandas.__version__,'scipy',scipy.__version__)"
+            echo
+            echo "## 数据层逐条结果"
+            pytest tests/test_data.py -v --tb=long 2>&1 | tail -80
+          } > diagnostic.txt 2>&1 || true
+          cat diagnostic.txt
+
+      - name: 上传诊断报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-py${{ matrix.python-version }}
+          path: diagnostic.txt
