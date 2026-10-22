@@ -45,10 +45,20 @@ class AkshareFeed:
         ``"qfq"`` 前复权（默认）、``"hfq"`` 后复权、``""`` 不复权。
     """
 
-    def __init__(self, cache_dir=None, adjust: str = "qfq", cache_days: int = 1):
+    def __init__(self, cache_dir=None, adjust: str = "qfq", cache_days: int = 1,
+                 pause: float = 1.0, retries: int = 3):
+        """
+        pause :
+            每次请求之间的间隔（秒）。akshare 走的是公开网页接口，请求太快
+            会被限流——批量下载时 1 秒的间隔能省掉大量失败的重试。
+        retries :
+            单个标的失败后的重试次数（指数退避）。
+        """
         self.adjust = adjust
         self.cache_dir = Path(cache_dir).expanduser() if cache_dir else None
         self.cache_days = int(cache_days)
+        self.pause = float(pause)
+        self.retries = int(retries)
         if self.cache_dir:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -72,17 +82,45 @@ class AkshareFeed:
 
         s = pd.Timestamp(start).strftime("%Y%m%d")
         e = pd.Timestamp(end).strftime("%Y%m%d")
-        try:
-            df = ak.stock_zh_a_hist(symbol=symbol, period="daily",
-                                    start_date=s, end_date=e, adjust=self.adjust)
-        except Exception as exc:  # noqa: BLE001
+        # 多数据源回退：eastmoney（默认）失败时自动换腾讯源。
+        # 实测在国内网络下，eastmoney 的 kline 接口经常被断连，而腾讯源稳定。
+        sources = [
+            ("eastmoney", lambda: ak.stock_zh_a_hist(
+                symbol=symbol, period="daily",
+                start_date=s, end_date=e, adjust=self.adjust)),
+            ("tencent", lambda: ak.stock_zh_a_hist_tx(
+                symbol=("sh" if symbol.startswith(("6", "9")) else "sz") + symbol,
+                start_date=s.replace("-", ""), end_date=e.replace("-", ""),
+                adjust=self.adjust if self.adjust in ("qfq", "hfq", "") else "qfq")),
+        ]
+
+        last_exc: Exception | None = None
+        df = None
+        used_source = None
+        for source_name, fetch in sources:
+            for attempt in range(1, self.retries + 1):
+                try:
+                    df = fetch()
+                    used_source = source_name
+                    last_exc = None
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    if attempt < self.retries:
+                        # 指数退避：被限流时硬重试只会更糟
+                        time.sleep(self.pause * (2 ** attempt))
+            if df is not None and len(df):
+                break
+        if df is None or not len(df):
             raise RuntimeError(
-                f"下载 {symbol} 失败（{exc}）。可能原因：\n"
-                f"  1. 网络不通或被限流；\n"
+                f"下载 {symbol} 失败（eastmoney 与 tencent 两个源共重试 "
+                f"{self.retries * 2} 次）：{last_exc}\n"
+                f"可能原因：\n"
+                f"  1. 网络不通或被数据源限流（可调大 AkshareFeed(pause=...)）；\n"
                 f"  2. akshare 接口变更；\n"
                 f"  3. 代码不存在（A 股六位数字，如 600519）。\n"
                 f"可以先试合成数据：generate_demo_market()"
-            ) from exc
+            ) from last_exc
 
         if df is None or df.empty:
             raise ValueError(f"{symbol} 在 {start}~{end} 没有数据")
@@ -92,6 +130,10 @@ class AkshareFeed:
             "最低": "low", "成交量": "volume", "成交额": "amount",
             "振幅": "amplitude", "涨跌幅": "pct_change",
             "涨跌额": "change", "换手率": "turnover_rate",
+            # 腾讯源（stock_zh_a_hist_tx）的列名
+            "date": "date", "open": "open", "close": "close", "high": "high",
+            "low": "low", "volume": "volume", "turnover": "turnover_rate",
+            "amount": "amount",
         }
         df = df.rename(columns=rename)
         if "date" not in df.columns:
@@ -103,6 +145,7 @@ class AkshareFeed:
 
         if cache_file:
             out.to_parquet(cache_file)
+        out.attrs["source"] = used_source
         return out
 
     # ------------------------------------------------------------ 多标的
@@ -119,7 +162,9 @@ class AkshareFeed:
         """
         symbols = [str(s) for s in symbols]
         frames, failed = {}, []
-        for sym in symbols:
+        for k, sym in enumerate(symbols):
+            if self.pause > 0 and k > 0:
+                time.sleep(self.pause)
             try:
                 df = self.fetch_one(sym, start, end)
                 if len(df) >= (min_days if drop_incomplete else 1):
