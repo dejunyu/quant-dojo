@@ -24,8 +24,14 @@ dev = ["pytest>=8.0", "httpx"]
 [project.scripts]
 qd = "qd.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["engine"]
-
 [tool.setuptools]
 include-package-data = true
+# 源码在 engine/ 下（不在仓库根），必须告诉 setuptools 去哪里找 `qd`。
+# 之前缺这行，导致 `pip install .` 安装失败 / 只装出空包。
+package-dir = {"" = "engine"}
+
+[tool.setuptools.packages.find]
+# find 必须放在 package-dir 之后并指向 engine/，否则 `import qd.data` 会报
+# ModuleNotFoundError —— 这是本地 macOS 能跑、Linux CI 却失败的真正原因。
+where = ["engine"]
+include = ["qd", "qd.*"]
