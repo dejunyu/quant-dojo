@@ -37,7 +37,14 @@ jobs:
       # 拆分执行：GitHub 的失败日志需要仓库管理员权限才能下载，
       # 拆成多个步骤后，从 "哪个步骤变红" 就能直接定位是哪个测试文件失败。
       - name: 1/6 数据层
-        run: pytest tests/test_data.py -v --tb=short
+        # 每个测试单独跑：某条失败不会中断后续，从步骤红绿即可看出是哪一条
+        run: |
+          for t in $(pytest tests/test_data.py --collect-only -q | grep '::'); do
+            echo "::group::$t"
+            pytest "$t" -v --tb=short || echo "### FAILED: $t"
+            echo "::endgroup::"
+          done
+          pytest tests/test_data.py -v --tb=short
 
       - name: 2/6 因子层
         run: pytest tests/test_factors.py -v --tb=short
