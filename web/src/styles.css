@@ -384,6 +384,15 @@ table.data td.txt { font-family: var(--sans); }
 }
 .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; }
 .md th { background: var(--bg-soft); font-weight: 600; font-size: 12px; }
+/* 表格首列通常是「环节 / 维度 / 因子」这类短标签。auto 布局下它会被
+   内容多的列挤成一条竖线，几个字折成两三行，很难读。给一个宽度下限，
+   短标签列就不会再被压扁；首列本身很长的表格不受影响（自然更宽）。 */
+.md th:first-child, .md td:first-child { min-width: 6.5em; }
+/* 窄屏下表格整体允许横向滚动，而不是把每个格子挤成竖条 */
+@media (max-width: 760px) {
+  .md table { display: block; overflow-x: auto; white-space: nowrap; }
+  .md th:first-child, .md td:first-child { min-width: auto; }
+}
 .md hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
 .md img { max-width: 100%; }
 
