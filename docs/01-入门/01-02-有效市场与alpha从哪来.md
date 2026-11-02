@@ -1,29 +1,27 @@
----
+<!--
 id: 01-02
 title: 有效市场与alpha从哪来
 category: 01-入门
 level: 入门
 order: 2
-prereq: ["01-01"]
+prereq: [01-01]
 tags: [理论, 有效市场, 行为金融]
-objectives:
-  - 能复述有效市场假说的三种形式及其检验含义
-  - 能用行为金融学解释 alpha 的存在，并指出其代价
-  - 能说明 alpha 衰减的机制，以及拥挤度为什么是风险指标
-key_points:
-  - EMH 弱式/半强式/强式分别对应"历史价格/公开信息/所有信息"是否已被反映
-  - alpha 不是免费的午餐，它是对承担行为偏差、提供流动性、处理信息的补偿
-  - alpha 会衰减：套利资金涌入 → 拥挤度上升 → 收益下降且左尾风险上升
-exercises:
-  - 用 FactorLab 计算某个因子的 IC 时间序列，观察它在不同年份的强弱变化
-  - 自己举出一个 A 股市场的行为偏差例子，写出它对应的可交易信号
-api:
-  - qd.research.lab.FactorLab
-  - qd.data.synthetic.generate_demo_market
-  - qd.factors.list_factors
----
+api: [qd.research.lab.FactorLab, qd.data.synthetic.generate_demo_market, qd.factors.list_factors]
+-->
 
 # 有效市场与alpha从哪来
+
+## 学完这一篇，你能做到
+
+- 能复述有效市场假说的三种形式及其检验含义
+- 能用行为金融学解释 alpha 的存在，并指出其代价
+- 能说明 alpha 衰减的机制，以及拥挤度为什么是风险指标
+
+## 本篇要点
+
+- EMH 弱式/半强式/强式分别对应"历史价格/公开信息/所有信息"是否已被反映
+- alpha 不是免费的午餐，它是对承担行为偏差、提供流动性、处理信息的补偿
+- alpha 会衰减：套利资金涌入 → 拥挤度上升 → 收益下降且左尾风险上升
 
 ## 一、有效市场假说（EMH）的三种形式
 
@@ -109,3 +107,8 @@ print(lab.quantile_backtest("mom_12_1", n_quantiles=5))
 - Eugene Fama, "Efficient Capital Markets: A Review of Theory and Empirical Work", *Journal of Finance*, 1970。
 - Robert Shiller，《非理性繁荣》（*Irrational Exuberance*）——从行为金融学角度对市场有效性的系统反驳。
 - Andrew Lo, "The Adaptive Markets Hypothesis", *Journal of Portfolio Management*, 2004——把有效市场与行为金融统一起来的框架。
+
+## 动手练习
+
+- 用 FactorLab 计算某个因子的 IC 时间序列，观察它在不同年份的强弱变化
+- 自己举出一个 A 股市场的行为偏差例子，写出它对应的可交易信号

@@ -168,24 +168,96 @@ def load_curriculum(docs_dir=None) -> Curriculum:
     return Curriculum(lessons)
 
 
-def _parse_lesson(text: str, rel_path: str) -> Lesson | None:
-    """解析带 YAML front matter 的 Markdown。"""
-    if not text.startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None
-    raw_fm, body = parts[1], parts[2]
+# 正文里的教学章节标题（新格式课程把学习目标/练习写成真正的二级标题，
+# 这样 GitHub 上直接可读，而不是被渲染成 front matter 表格）。
+SECTION_OBJECTIVES = "学完这一篇，你能做到"
+SECTION_KEY_POINTS = "本篇要点"
+SECTION_EXERCISES = "动手练习"
+
+_SECTION_ALIASES = {
+    "objectives": (SECTION_OBJECTIVES, "学完这篇你能做到", "学习目标"),
+    "key_points": (SECTION_KEY_POINTS, "核心要点", "要点"),
+    "exercises": (SECTION_EXERCISES, "练习题", "动手练一练"),
+}
+
+
+def _extract_section(body: str, titles: tuple[str, ...]) -> list[str]:
+    """从正文里抽出某个 ``## 标题`` 段落的列表项（不修改 body）。"""
+    for title in titles:
+        pattern = re.compile(
+            rf"^##[ \t]*{re.escape(title)}[ \t]*$\n(.*?)(?=^##[ \t]|\Z)", re.M | re.S
+        )
+        m = pattern.search(body)
+        if not m:
+            continue
+        items = []
+        for line in m.group(1).splitlines():
+            line = line.strip()
+            if line.startswith(("- ", "* ")):
+                items.append(line[2:].strip())
+        if items:
+            return items
+    return []
+
+
+def _split_metadata(text: str) -> tuple[dict, str] | None:
+    """切出元信息块与正文。
+
+    支持两种写法：
+
+    * 新格式 —— ``<!--`` 包围的 HTML 注释元信息（推荐）；
+    * 旧格式 —— ``---`` 包围的 YAML front matter（仅兼容旧课程）。
+
+    GitHub 不认 front matter，会把 ``key: value`` 逐条渲染成表格：读者打开
+    一篇教程，第一眼看到的是 ``id: 01-01``、``title: ...``，正文被挤到第八张
+    表格之后。HTML 注释在 GitHub 上完全不可见，而解析器照样能读到全部字段，
+    所以新写的课程一律用注释块。
+    """
+    stripped = text.lstrip("\ufeff")
+
+    if stripped.startswith("<!--"):
+        end = stripped.find("-->")
+        if end == -1:
+            return None
+        raw, body = stripped[4:end], stripped[end + 3:]
+        return (_yaml_dict(raw), body)
+
+    if stripped.startswith("---"):
+        parts = stripped.split("---", 2)
+        if len(parts) < 3:
+            return None
+        return (_yaml_dict(parts[1]), parts[2])
+
+    return None
+
+
+def _yaml_dict(raw: str) -> dict:
     try:
-        fm = yaml.safe_load(raw_fm) or {}
+        fm = yaml.safe_load(raw) or {}
     except yaml.YAMLError:
-        fm = {}
-    if not isinstance(fm, dict) or "id" not in fm:
+        return {}
+    return fm if isinstance(fm, dict) else {}
+
+
+def _parse_lesson(text: str, rel_path: str) -> Lesson | None:
+    """解析课程 Markdown（元信息块 + 正文）。"""
+    split = _split_metadata(text)
+    if split is None:
         return None
+    fm, body = split
+    if "id" not in fm:
+        return None
+    body = body.strip()
 
     def lst(key):
         v = fm.get(key, [])
         return [str(x) for x in v] if isinstance(v, list) else ([str(v)] if v else [])
+
+    # 新格式：学习目标与练习写在正文里（GitHub 上也能读到）；
+    # 旧格式：仍留在元信息里。两边都取不到时为空列表。
+    objectives = lst("objectives") or _extract_section(body, _SECTION_ALIASES["objectives"])
+    key_points = lst("key_points") or _extract_section(body, _SECTION_ALIASES["key_points"])
+    exercises = lst("exercises") or _extract_section(body, _SECTION_ALIASES["exercises"])
 
     return Lesson(
         id=str(fm.get("id")),
@@ -195,10 +267,10 @@ def _parse_lesson(text: str, rel_path: str) -> Lesson | None:
         order=int(fm.get("order", 999) or 999),
         prereq=lst("prereq"),
         tags=lst("tags"),
-        objectives=lst("objectives"),
-        key_points=lst("key_points"),
-        exercises=lst("exercises"),
+        objectives=objectives,
+        key_points=key_points,
+        exercises=exercises,
         api=lst("api"),
-        body=body.strip(),
+        body=body,
         path=rel_path,
     )

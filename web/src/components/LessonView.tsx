@@ -16,6 +16,31 @@ function withWikiLinks(body: string): string {
   });
 }
 
+/**
+ * 去掉正文里已经用卡片单独渲染的章节（学习目标 / 动手练习）。
+ *
+ * 这些内容在 GitHub 上必须是正文的一部分（读者直接可读），但在平台里
+ * 已经渲染成上下的卡片，正文再出现一次就是重复。key_points 不走卡片，
+ * 因此保留在正文里。
+ */
+const CARD_SECTION_TITLES = ['学完这一篇，你能做到', '动手练习'];
+
+function stripCardSections(body: string): string {
+  const lines = body.split('\n');
+  const kept: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const heading = /^##\s+(.*)$/.exec(line);
+    if (heading) {
+      skipping = CARD_SECTION_TITLES.includes(heading[1].trim());
+      if (skipping) continue;
+    }
+    if (!skipping) kept.push(line);
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function LessonView({
   lessonId,
   onNavigate,
@@ -118,7 +143,7 @@ export function LessonView({
             },
           }}
         >
-          {withWikiLinks(lesson.body ?? '')}
+          {withWikiLinks(stripCardSections(lesson.body ?? ''))}
         </ReactMarkdown>
       </article>
 
