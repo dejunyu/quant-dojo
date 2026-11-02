@@ -1,4 +1,4 @@
----
+<!--
 id: 08-06
 title: 风险指标VaR与CVaR
 category: 08-组合与风险
@@ -6,23 +6,22 @@ level: 进阶
 order: 6
 prereq: []
 tags: [风险指标, VaR, 尾部风险]
-objectives:
-  - 准确写出 VaR 与 CVaR 的定义并说明二者关系
-  - 能用历史模拟、参数法、蒙特卡洛三种方法计算 VaR
-  - 知道 VaR 不满足次可加性，以及为什么要改用 CVaR
-key_points:
-  - $VaR_\alpha=\inf\{l:P(L>l)\le 1-\alpha\}$，只给出阈值不给尾部深度
-  - $CVaR_\alpha=\mathbb{E}[L\mid L\ge VaR_\alpha]$，是**一致风险度量**
-  - VaR 不满足次可加性：$VaR(A+B)$ 可能大于 $VaR(A)+VaR(B)$
-exercises:
-  - 用同一组合分别以历史法/正态法/t 分布法算 99% VaR，比较差异
-  - 构造两个厚尾分布的组合，验证 VaR 违反次可加性而 CVaR 不违反
-api:
-  - qd.metrics.perf.value_at_risk
-  - qd.metrics.perf.conditional_var
----
+api: [qd.metrics.perf.value_at_risk, qd.metrics.perf.conditional_var]
+-->
 
 # 风险指标VaR与CVaR
+
+## 学完这一篇，你能做到
+
+- 准确写出 VaR 与 CVaR 的定义并说明二者关系
+- 能用历史模拟、参数法、蒙特卡洛三种方法计算 VaR
+- 知道 VaR 不满足次可加性，以及为什么要改用 CVaR
+
+## 本篇要点
+
+- $VaR_\alpha=\inf\{l:P(L>l)\le 1-\alpha\}$，只给出阈值不给尾部深度
+- $CVaR_\alpha=\mathbb{E}[L\mid L\ge VaR_\alpha]$，是**一致风险度量**
+- VaR 不满足次可加性：$VaR(A+B)$ 可能大于 $VaR(A)+VaR(B)$
 
 VaR（Value at Risk，在险价值）是过去三十年金融机构最常用的风险数字，也是被批评最多的。理解它的定义、算法与缺陷，是风险管理入门的必修课。
 
@@ -136,3 +135,8 @@ print("最大回撤 %.2f%%  Ulcer %.2f" % (max_drawdown(port)*100, ulcer_index(p
 - R. Tyrrell Rockafellar & Stanislav Uryasev (2002), *Conditional Value-at-Risk for General Loss Distributions*, Journal of Banking & Finance
 - Paul Kupiec (1995), *Techniques for Verifying the Accuracy of Risk Measurement Models*, Journal of Derivatives
 - Philippe Jorion (2006), *Value at Risk: The New Benchmark for Managing Financial Risk*, 3rd ed., McGraw-Hill
+
+## 动手练习
+
+- 用同一组合分别以历史法/正态法/t 分布法算 99% VaR，比较差异
+- 构造两个厚尾分布的组合，验证 VaR 违反次可加性而 CVaR 不违反

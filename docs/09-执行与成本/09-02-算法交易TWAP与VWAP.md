@@ -1,4 +1,4 @@
----
+<!--
 id: 09-02
 title: 算法交易TWAP与VWAP
 category: 09-执行与成本
@@ -6,23 +6,22 @@ level: 进阶
 order: 2
 prereq: [09-01]
 tags: [算法交易, TWAP, VWAP, 执行]
-objectives:
-  - 掌握 TWAP/VWAP/POV/IS 四类算法的目标函数与差异
-  - 能计算跟踪误差并理解它在算法选择中的作用
-  - 能按订单规模、流动性与紧迫性选择合适算法
-key_points:
-  - TWAP 按时间均匀切片，VWAP 按成交量分布加权
-  - POV 限定参与率 $\le\rho$，自适应于成交量，冲击可控但时间不确定
-  - IS（实现落差）以决策价 $P_{dec}$ 为基准，最小化总成本，兼顾机会成本
-exercises:
-  - 用日内成交量数据画出 U 型分布，构造 VWAP 切片表并与 TWAP 对比
-  - 计算不同算法相对 VWAP 基准的跟踪误差，看参与率如何影响它
-api:
-  - qd.data.MarketData
-  - qd.metrics.perf.perf_report
----
+api: [qd.data.MarketData, qd.metrics.perf.perf_report]
+-->
 
 # 算法交易TWAP与VWAP
+
+## 学完这一篇，你能做到
+
+- 掌握 TWAP/VWAP/POV/IS 四类算法的目标函数与差异
+- 能计算跟踪误差并理解它在算法选择中的作用
+- 能按订单规模、流动性与紧迫性选择合适算法
+
+## 本篇要点
+
+- TWAP 按时间均匀切片，VWAP 按成交量分布加权
+- POV 限定参与率 $\le\rho$，自适应于成交量，冲击可控但时间不确定
+- IS（实现落差）以决策价 $P_{dec}$ 为基准，最小化总成本，兼顾机会成本
 
 当单笔订单占标的日成交量的比例超过约 1%~5% 时，一次性下单会造成明显冲击。算法交易（algorithmic execution）把大单拆成许多小单，在时间与成交量上分散，以换取更低的冲击成本。本节讲四类最核心的算法及其选择逻辑。
 
@@ -167,3 +166,8 @@ print("VWAP 基准价 %.2f  TWAP 基准价 %.2f  跟踪误差 %.3f"
 - André Perold (1988), *The Implementation Shortfall: Paper versus Reality*, Journal of Portfolio Management
 - Robert Kissell & Morton Glantz (2003), *Optimal Trading Strategies*, AMACOM
 - Robert Kissell (2013), *The Science of Algorithmic Trading and Portfolio Management*, Academic Press
+
+## 动手练习
+
+- 用日内成交量数据画出 U 型分布，构造 VWAP 切片表并与 TWAP 对比
+- 计算不同算法相对 VWAP 基准的跟踪误差，看参与率如何影响它

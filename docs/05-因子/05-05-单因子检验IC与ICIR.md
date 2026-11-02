@@ -1,4 +1,4 @@
----
+<!--
 id: 05-05
 title: 单因子检验IC与ICIR
 category: 05-因子
@@ -6,27 +6,28 @@ level: 进阶
 order: 5
 prereq: [05-03]
 tags: [因子, IC, ICIR, 显著性检验]
-objectives:
-  - 能计算 Pearson IC 与 RankIC 并说明二者差异
-  - 能用 ICIR 与 t 统计量判断单因子是否统计显著
-  - 能说明 IC>0.02 这类经验阈值的适用条件与局限
-key_points:
-  - IC = 第 t 期因子暴露与 t+1 期收益的横截面相关系数
-  - ICIR = mean(IC)/std(IC)，t 统计量 $t = \mathrm{ICIR}\sqrt{n-1}$
-  - RankIC 更稳健，Pearson IC 对极端值敏感
-  - IC>0.02、ICIR>0.3 是经验值，依赖市场、样本期与调仓频率
-exercises:
-  - 用 np.corrcoef 手算 mom_12_1 的 IC 序列，与 lab.ic_series 对账
-  - 对同一因子分别算 horizon=5/20/60 的 IC，观察衰减方向
 api:
   - qd.research.lab.FactorLab
   - qd.research.lab.FactorLab.ic
   - qd.research.lab.FactorLab.ic_series
   - qd.research.lab.FactorLab.report
   - qd.data.synthetic.generate_demo_market
----
+-->
 
 # 单因子检验IC与ICIR
+
+## 学完这一篇，你能做到
+
+- 能计算 Pearson IC 与 RankIC 并说明二者差异
+- 能用 ICIR 与 t 统计量判断单因子是否统计显著
+- 能说明 IC>0.02 这类经验阈值的适用条件与局限
+
+## 本篇要点
+
+- IC = 第 t 期因子暴露与 t+1 期收益的横截面相关系数
+- ICIR = mean(IC)/std(IC)，t 统计量 $t = \mathrm{ICIR}\sqrt{n-1}$
+- RankIC 更稳健，Pearson IC 对极端值敏感
+- IC>0.02、ICIR>0.3 是经验值，依赖市场、样本期与调仓频率
 
 一个因子算出来之后，第一个要回答的问题是：**它到底有没有预测能力？** IC（Information Coefficient，信息系数）就是回答这个问题最基础的工具。
 
@@ -165,3 +166,8 @@ print("lab.report    :", lab.report(name))
 - Grinold, R. C. & Kahn, R. N., Active Portfolio Management
 - Jegadeesh, N. & Titman, S. (1993), Returns to Buying Winners and Selling Losers
 - Fama, E. F. & MacBeth, J. D. (1973), Risk, Return, and Equilibrium: Empirical Tests
+
+## 动手练习
+
+- 用 np.corrcoef 手算 mom_12_1 的 IC 序列，与 lab.ic_series 对账
+- 对同一因子分别算 horizon=5/20/60 的 IC，观察衰减方向

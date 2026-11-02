@@ -1,30 +1,31 @@
----
+<!--
 id: 02-07
 title: pandas与numpy量化技巧
 category: 02-数据与工具
 level: 中级
 order: 7
-prereq: ["02-01", "02-04"]
+prereq: [02-01, 02-04]
 tags: [工具, pandas, 性能]
-objectives:
-  - 养成"面板即 DataFrame(dates × symbols)"的统一心智模型
-  - 掌握向量化、rolling、groupby/resample、shift 对齐的正确用法
-  - 能识别并规避 apply/循环/链式赋值等性能陷阱
-key_points:
-  - 统一约定：行=日期升序，列=标的；所有信号都是这个形状
-  - 90% 的因子可以用 rolling + 算术运算符写完，不需要循环
-  - 性能陷阱：`df.apply`、`iterrows`、逐列 concat、链式赋值
-exercises:
-  - 用纯向量化方式实现 20 日动量、20 日波动率、20 日成交额均值三个因子并计算它们的截面相关性
-  - 把一段 for 循环实现的因子改成向量化版本，测量加速比
 api:
   - qd.data.MarketData
   - qd.data.synthetic.generate_demo_market
   - qd.factors.pipeline.winsorize
   - qd.factors.pipeline.zscore
----
+-->
 
 # pandas与numpy量化技巧
+
+## 学完这一篇，你能做到
+
+- 养成"面板即 DataFrame(dates × symbols)"的统一心智模型
+- 掌握向量化、rolling、groupby/resample、shift 对齐的正确用法
+- 能识别并规避 apply/循环/链式赋值等性能陷阱
+
+## 本篇要点
+
+- 统一约定：行=日期升序，列=标的；所有信号都是这个形状
+- 90% 的因子可以用 rolling + 算术运算符写完，不需要循环
+- 性能陷阱：`df.apply`、`iterrows`、逐列 concat、链式赋值
 
 ## 一、统一心智模型
 
@@ -283,3 +284,8 @@ print(combo.iloc[-1].describe().round(3))
 - Wes McKinney，《利用 Python 进行数据分析》（*Python for Data Analysis*）——pandas 作者本人所著，是理解索引、对齐与 groupby 的最佳参考。
 - pandas 官方文档的 "User Guide → Window / Groupby / Resampling" 章节——行为细节与边界条件的权威说明。
 - NumPy 官方文档关于广播（broadcasting）的说明——理解向量化的底层规则。
+
+## 动手练习
+
+- 用纯向量化方式实现 20 日动量、20 日波动率、20 日成交额均值三个因子并计算它们的截面相关性
+- 把一段 for 循环实现的因子改成向量化版本，测量加速比
