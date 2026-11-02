@@ -96,6 +96,30 @@ def test_zero_baseline_lessons_have_no_formula():
     assert not bad, "零基础篇不应出现公式：\n" + "\n".join(bad)
 
 
+def test_order_zero_is_respected():
+    """order: 0 必须排在 order: 1 之前。
+
+    回归测试：早期实现写的是 ``int(fm.get("order", 999) or 999)``，
+    而 ``0 or 999`` 等于 999——于是唯一一篇 order: 0 的课程被排到了最后。
+    "0 是合法值但被当成空"这类 bug 很隐蔽，用测试钉住。
+    """
+    from qd.tutor.curriculum import _parse_lesson
+
+    lesson = _parse_lesson(
+        '<!--\nid: 99-99\ntitle: 测试\ncategory: 01-入门\norder: 0\n-->\n\n# 测试\n',
+        'x.md',
+    )
+    assert lesson is not None
+    assert lesson.order == 0
+
+    c = load_curriculum()
+    intro = [l for cat in c.categories() if cat["id"] == "01-入门"
+             for l in cat["lessons"]]
+    assert intro, "01-入门 分类为空"
+    assert intro[0]["order"] == min(l["order"] for l in intro), \
+        "首篇不是 order 最小的课程"
+
+
 def test_lesson_ids_unique():
     c = load_curriculum()
     ids = [l.id for l in c]

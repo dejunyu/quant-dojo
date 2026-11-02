@@ -239,6 +239,21 @@ def _yaml_dict(raw: str) -> dict:
     return fm if isinstance(fm, dict) else {}
 
 
+def _as_int(value, default: int) -> int:
+    """把元信息里的数值安全转成 int。
+
+    不能写成 ``int(v or 999)``——``order: 0`` 是合法值（用来把某篇排到最前），
+    但 ``0`` 是假值，会被 ``or`` 直接吞掉变成 999。这类"0 被当成空"的坑在
+    Python 里很常见，这里显式区分 None 与 0。
+    """
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _parse_lesson(text: str, rel_path: str) -> Lesson | None:
     """解析课程 Markdown（元信息块 + 正文）。"""
     split = _split_metadata(text)
@@ -264,7 +279,7 @@ def _parse_lesson(text: str, rel_path: str) -> Lesson | None:
         title=str(fm.get("title", "")),
         category=str(fm.get("category", "未分类")),
         level=str(fm.get("level", "入门")),
-        order=int(fm.get("order", 999) or 999),
+        order=_as_int(fm.get("order"), 999),
         prereq=lst("prereq"),
         tags=lst("tags"),
         objectives=objectives,
