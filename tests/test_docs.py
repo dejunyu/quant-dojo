@@ -56,8 +56,17 @@ def test_curriculum_exists():
     assert len(c) >= 60, "课程数量不足"
 
 
+# 打过这个标签的课程是「零基础版」：面向完全没有数学背景的读者，
+# **刻意一个公式都不写**。数学符号会把还没建立直觉的人挡在门外，
+# 入门篇只讲"是什么、为什么"，公式留给后面章节。
+ZERO_BASELINE_TAG = "零基础"
+
+
 def test_every_lesson_well_formed():
-    """每篇课程必须有：足够的字数、学习目标、核心要点、公式、代码块。"""
+    """每篇课程必须有：足够的字数、学习目标、核心要点、代码块。
+
+    「零基础」篇不要求公式（见 ZERO_BASELINE_TAG），其余课程仍然要求。
+    """
     c = load_curriculum()
     problems = []
     for l in c:
@@ -69,11 +78,22 @@ def test_every_lesson_well_formed():
             problems.append(f"{l.id} 缺少 key_points")
         if not l.code_blocks():
             problems.append(f"{l.id} 没有代码示例")
-        if "$" not in l.body:
+        if ZERO_BASELINE_TAG not in l.tags and "$" not in l.body:
             problems.append(f"{l.id} 没有数学公式")
         if not l.category:
             problems.append(f"{l.id} 缺少 category")
     assert not problems, "\n".join(problems[:15])
+
+
+def test_zero_baseline_lessons_have_no_formula():
+    """标了「零基础」的课程必须零公式——这是写作者对自己的硬约束。
+
+    一旦有人往零基础篇里塞进公式，那道门槛就又立起来了。
+    """
+    c = load_curriculum()
+    bad = [f"{l.id} {l.title}" for l in c
+           if ZERO_BASELINE_TAG in l.tags and "$" in l.body]
+    assert not bad, "零基础篇不应出现公式：\n" + "\n".join(bad)
 
 
 def test_lesson_ids_unique():
