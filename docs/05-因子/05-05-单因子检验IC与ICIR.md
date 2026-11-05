@@ -6,168 +6,206 @@ level: 进阶
 order: 5
 prereq: [05-03]
 tags: [因子, IC, ICIR, 显著性检验]
-api:
-  - qd.research.lab.FactorLab
-  - qd.research.lab.FactorLab.ic
-  - qd.research.lab.FactorLab.ic_series
-  - qd.research.lab.FactorLab.report
-  - qd.data.synthetic.generate_demo_market
+api: [qd.research.lab.FactorLab, qd.research.lab.FactorLab.ic, qd.research.lab.FactorLab.ic_series, qd.research.lab.FactorLab.report, qd.data.synthetic.generate_demo_market]
 -->
 
 # 单因子检验IC与ICIR
 
 ## 学完这一篇，你能做到
 
-- 能计算 Pearson IC 与 RankIC 并说明二者差异
-- 能用 ICIR 与 t 统计量判断单因子是否统计显著
-- 能说明 IC>0.02 这类经验阈值的适用条件与局限
+- 用自己的话说清 **IC** 和 **ICIR** 各在测什么，为什么必须一起看
+- 分清 Pearson IC 与 RankIC，知道什么时候该用哪个
+- 理解"IC > 0.02"这类经验阈值为什么**不能当教条**
+- 会手算一遍 IC 并与平台对账
 
 ## 本篇要点
 
-- IC = 第 t 期因子暴露与 t+1 期收益的横截面相关系数
-- ICIR = mean(IC)/std(IC)，t 统计量 $t = \mathrm{ICIR}\sqrt{n-1}$
-- RankIC 更稳健，Pearson IC 对极端值敏感
-- IC>0.02、ICIR>0.3 是经验值，依赖市场、样本期与调仓频率
+- **IC** 测"准不准"（因子值与未来收益的相关性），**ICIR** 测"稳不稳"
+- ICIR = IC 均值 ÷ IC 标准差；**高均值 + 大波动 ≠ 好因子**
+- RankIC 更抗极端值；Pearson IC 对离群点敏感（05-03）
+- 经验阈值依赖市场、样本期、调仓频率，**必须结合分层回测一起看**
 
-一个因子算出来之后，第一个要回答的问题是：**它到底有没有预测能力？** IC（Information Coefficient，信息系数）就是回答这个问题最基础的工具。
+---
 
-## 一、IC 的定义
+## 一、从一条"基本定律"说起
 
-在第 $t$ 期，把所有股票的因子暴露 $x_{i,t}$ 与它们在未来 $h$ 期的收益 $r_{i,t \to t+h}$ 放在一起，计算横截面相关系数，就得到当期 IC：
+1990 年代中期，**理查德·格林诺德**（Richard Grinold）与**罗纳德·卡恩**（Ronald Kahn）写了《主动投资组合管理》（*Active Portfolio Management*，第 2 版 1999 年由 McGraw-Hill 出版，596 页）。这本书把"主动管理能赚多少"拆成了一件极简洁的事：
 
-$$\mathrm{IC}_t = \mathrm{corr}\Big(\{x_{i,t}\}_{i=1}^{N},\ \{r_{i,t\to t+h}\}_{i=1}^{N}\Big)$$
+> **信息比率 IR ≈ 信息系数 IC × √广度 BR**
 
-得到的 $\mathrm{IC}_t$ 序列随时间变化，其最常用的两个统计量是：
+这句话通常被叫作**主动管理基本定律**（首版年份有 1994 / 1995 两说；公式为业界通行转引，**未核到原书一手公式页**，措辞上宜写"通常归于 Grinold 与 Kahn"）。
 
-$$\overline{\mathrm{IC}} = \frac{1}{n}\sum_{t=1}^{n}\mathrm{IC}_t,\qquad \sigma_{\mathrm{IC}} = \sqrt{\frac{1}{n-1}\sum_{t=1}^{n}(\mathrm{IC}_t - \overline{\mathrm{IC}})^2}$$
+逐个拆：
 
-直觉上，$\overline{\mathrm{IC}} = 0.05$ 意味着因子暴露能"解释"未来收益横截面约 5% 的相关结构。它很小，但由于横截面样本极多（几百到几千只股票 × 几百个时间点），即使微弱也可以高度显著。
-
-### 关键：收益必须向前对齐
-
-计算 IC 时最容易出错的一步是对齐。第 $t$ 期的因子暴露只能对应 $t$ 期之后实现的收益。若用 $t$ 期因子对 $t$ 期当天收益求相关，看起来 IC 会异常之高（尤其对反转因子），但这是纯粹的自相关假象，属于典型的[前视偏差](../06-回测/06-03-前视偏差的十种来源.md)。
-
-## 二、Pearson IC 还是 RankIC
-
-| 维度 | Pearson IC | Spearman RankIC |
+| 符号 | 名字 | 白话 |
 | --- | --- | --- |
-| 定义 | 原始值线性相关 | 排名之间的相关（即 Pearson 作用于秩） |
-| 对极端值 | 敏感，一个离群点可大幅改变 | 免疫 |
-| 捕捉关系 | 仅线性 | 任意单调关系 |
-| 典型量级 | 较小 | 通常比 Pearson 大 0.01~0.03 |
-| 适用场景 | 因子已去极值、分布对称 | 厚尾、偏态的基本面因子 |
+| $IC$ | 信息系数 | **你预测得准不准** |
+| $BR$ | 广度 Breadth | **一年独立下注多少次** |
+| $IR$ | 信息比率 | 每承担一单位主动风险，换来多少超额 |
 
-**实践建议：以 RankIC 为主，Pearson IC 为辅。** 若两者差异巨大，说明因子的预测能力集中在少数极端样本上，应回到[去极值](../05-因子/05-03-去极值与标准化.md)与[分层回测](../05-因子/05-06-分层回测.md)确认是否为个例驱动。
+> **这条定律最反直觉的地方，是那个根号：**
+> **"准头"只按线性贡献，"下注次数"按平方根贡献——但两者是相乘的。**
+> 一个 IC 只有 0.03 的弱因子，如果能在 3000 只股票上、每周独立下注，
+> 成绩可能远好过一个 IC 0.10 但一年只敢下 5 次注的"神预测"。
+>
+> 这正是 01-05 讲过的"量化相对主观的结构性优势 = 广度"，
+> 也是 05-09 因子合成的理论地基。
 
-## 三、ICIR 与 t 检验
+> ⚠️ **一个必须说的常识**：**IC / IR / ICIR 这些术语，找不到可靠的"单一发明者"**。
+> 别写成"某某于某年提出 IC"。能说准的是：这套"准头 × 广度"的框架通常归于 Grinold 与 Kahn 的书。
 
-只有 IC 均值还不够——一个 IC 均值为 0.03 但每期在 ±0.10 之间剧烈波动的因子，实盘体验会很差。因此引入信息比率：
+而这个 $IC$，就是本篇的主角——**检验一个因子，本质上就是先问它准不准、再问它稳不稳**。
 
-$$\mathrm{ICIR} = \frac{\overline{\mathrm{IC}}}{\sigma_{\mathrm{IC}}}$$
+---
 
-ICIR 衡量的是每单位 IC 波动能换来多少 IC 均值，即"稳定性"。在 $\{\mathrm{IC}_t\}$ 近似独立同分布的假设下，检验 $\overline{\mathrm{IC}} = 0$ 的 t 统计量为：
+## 二、IC 是什么（逐个讲透）
 
-$$t = \frac{\overline{\mathrm{IC}}}{\sigma_{\mathrm{IC}} / \sqrt{n}} = \mathrm{ICIR}\sqrt{n}$$
+在第 t 期，把**所有股票的因子值**与它们**未来 h 期的收益**放在一起，算横截面相关系数，就得到当期 IC：
 
-（教材中常见的写法 $t = \mathrm{ICIR}\sqrt{n-1}$ 与之等价，差别只是用 $n-1$ 还是 $n$ 做自由度修正。）经验上 $|t| > 2$ 对应 5% 显著性水平。
+$$\mathrm{IC}_t = \mathrm{corr}\Big(\{x_{i,t}\}_i,\ \{r_{i,t\to t+h}\}_i\Big)$$
 
-### 自相关问题
+| 符号 | 白话 |
+| --- | --- |
+| $x_{i,t}$ | 股票 i 在 t 日的因子值 |
+| $r_{i,t\to t+h}$ | 它未来 h 天的收益 |
+| $\mathrm{corr}$ | 相关系数，取值 -1 ~ +1 |
+| $\mathrm{IC}_t$ | "今天这个因子，把未来的涨跌排对了吗" |
 
-$\{\mathrm{IC}_t\}$ 往往存在正自相关——因为重叠的持有期（horizon=20 时相邻期的收益窗口重叠 19 天）会产生机械性自相关，宏观状态也会让因子连续几期同时有效或失效。此时 $\sqrt{n}$ 放大 t 值是不合法的，有效样本量远小于 $n$，标准做法是：
+直觉上 $\overline{IC} = 0.05$ 意味着因子暴露与未来收益横截面约有 5% 的相关结构。**它很小**——但由于横截面样本极多（几百到几千只股票 × 几百个时间点），即使微弱也可以高度显著。
 
-- 使用 **Newey-West** 修正的标准误（滞后阶数取约 $h$ 期）；
-- 或使用**非重叠期**采样（每 20 期取一个 IC），牺牲样本量换取独立性。
+> 补个常识：**IC 读作"信息系数"（Information Coefficient）**。
+> 0.03 左右已经算不错，0.08 相当强，**负值就是反向指标**（01-02 见过）。
+> 别被小数吓到：**量化赚的本来就是"微弱但可重复"的钱**（01-05 的广度）。
 
-不加修正直接看 t 值，是最常见的"因子显著"假象来源之一。
+### Pearson IC 还是 RankIC
 
-## 四、经验阈值及其局限
-
-业界流传的门槛大致是：
-
-| 指标 | 经验阈值 | 含义 |
+| | 怎么算 | 特点 |
 | --- | --- | --- |
-| $\vert\overline{\mathrm{IC}}\vert$ | > 0.02 | 具备初步可用性 |
-| $\vert\overline{\mathrm{RankIC}}\vert$ | > 0.03 | 同上（RankIC 通常更大） |
-| $\vert\mathrm{ICIR}\vert$ | > 0.3 | 稳定性尚可 |
-| IC 为正的比例 | > 60% | 方向一致性 |
-| $ \vert t \vert$ | > 2 | 统计显著 |
+| **Pearson IC** | 原始因子值与原始收益的相关 | 保留强度信息，但**对极端值敏感** |
+| **RankIC** | 两边先转排名，再算相关 | 抗离群点、抗厚尾（04-02），**更稳健** |
 
-**这些阈值必须谨慎使用**，原因有四：
+> 05-03 讲过去极值与排名变换——**RankIC 就是把那份稳健性直接内建进检验里**。
+> 两个都报、互相印证，是业界的稳妥做法；**只报好看的那个，就是在挑数字**。
 
-1. **依赖调仓频率**：日频因子的 IC 天然比月频小（单日收益噪声占比高），用同一阈值横评不公平。
-2. **依赖横截面样本**：小盘股池的 IC 通常高于大盘股池，因为前者定价效率低。
-3. **依赖市场与样本期**：A 股、美股、新兴市场的有效因子与量级差异明显，牛市与熊市也不同。
-4. **不可跨因子直接比较**：一个覆盖全市场的因子 IC=0.03，与一个只在沪深 300 内 IC=0.03 的因子，难度完全不同。
+---
 
-更合理的做法是**用同一市场、同一股票池、同一频率下的全部候选因子做横向排名**，而不是套用一个绝对阈值。
+## 三、ICIR：为什么"准"还不够（单独讲透）
 
-## 五、IC 为正但分组不单调
+IC 是**一串随时间变化的数**（每天/每月一个），不是常数。于是有两个统计量：
 
-IC 只看相关性，不看形态。可能出现：IC 均值为正且显著，但[分层回测](../05-因子/05-06-分层回测.md)的 5 组收益是 0.5%、0.4%、0.3%、0.5%、0.9%——不单调。常见成因：
+$$\overline{IC} = \frac{1}{n}\sum_{t=1}^{n}\mathrm{IC}_t, \qquad \mathrm{ICIR} = \frac{\overline{IC}}{\sigma_{IC}}$$
 
-- **非线性**：因子与收益是 U 型关系，线性相关系数无法刻画；
-- **尾部驱动**：只有第 1 组（或第 5 组）显著异常，中间的区分度为零，此时多空收益来自一端；
-- **少数股票主导**：某一期某只重组股暴涨，单独拉高了 IC。
+| 符号 | 白话 |
+| --- | --- |
+| $\overline{IC}$ | 平均下来准不准 |
+| $\sigma_{IC}$ | 这个"准头"自己抖得有多厉害 |
+| **ICIR** | **每承担一单位"不稳定"，换来多少准头** |
 
-因此 **IC 与分层回测必须同时做**：IC 回答"有没有关系"，分层回测回答"关系长什么样、能不能靠分组赚到"。
+> **打个比方**：两个因子平均 IC 都是 0.03。
+> 一个每月都在 0.02~0.04 之间（稳），另一个在 -0.10~+0.16 之间乱跳（不稳）。
+> **前者能拿去实盘，后者不能**——因为你不知道下个月它站哪边。
+>
+> **ICIR 就是把"稳不稳"变成一个可以和别人比较的数。**
+> 它和 01-05 那个信息比率 IR 是同构的：**都是"均值 ÷ 波动"**，
+> 只是一个用在因子预测力上，一个用在组合超额收益上。
 
-## 六、代码：手算 IC 并与平台对账
+t 统计量也常一起报（$t \approx \mathrm{ICIR}\sqrt{n-1}$），但请注意 04-02 的警告：**厚尾 + 试太多次时，t 值会骗人**（01-03 的 AMS 论文、06 章的多重检验）。
+
+---
+
+## 四、经验阈值为何不能当教条
+
+行业里常听到"IC > 0.02、ICIR > 0.3 就算可用"。**这类数字是经验值，不是物理常数**，它依赖：
+
+- 市场（A 股与美股不同）、样本期（牛熊）、调仓频率；
+- 因子覆盖股票数（广度 BR）；
+- 交易成本（03-04）——**IC 再高，换手一上去就被吃光**。
+
+> ⚠️ **更要命的一条**：IC 是"相关性"，它**不保证赚钱**。
+> 一个因子可能 IC 显著为正，但高暴露组与低暴露组的收益差**不够覆盖成本**，
+> 或者分组根本不单调（下一节）。所以：
+> **IC 只是第一道筛子，必须接 05-06 的分层回测才算数。**
+
+还有一个反直觉的情形：**IC 为正，但分组不单调**——可能只是少数极端股票把相关系数撑起来了。这正是 05-01 那段 `FactorLab.report` 说"通过 / 但分组单调性差"的原因。
+
+---
+
+## 五、用平台手算 IC 并对账
+
+按 [00-开始之前](../01-入门/00-开始之前.md) 装好环境，把下面这段存成文件跑一次。它先**手算**一遍 IC，再和平台对账：
 
 ```python
 import numpy as np
-import pandas as pd
 from qd.data.synthetic import generate_demo_market
 from qd.factors import get_factor
 from qd.research.lab import FactorLab
 
 md = generate_demo_market(n_symbols=50, start="2018-01-01", end="2024-12-31", seed=7)
 lab = FactorLab(md)
+f = get_factor("mom_12_1").compute(md).iloc[::20]      # 每 20 日取一个截面
+fwd = md.close().shift(-20) / md.close() - 1           # 未来 20 日收益（标签，不是特征！）
 
-name = "mom_12_1"
-expo = get_factor(name).compute(md)          # dates × symbols
-fwd = md.close().pct_change(20).shift(-20)   # 未来 20 日收益，注意 shift 方向
-
-# 手工计算 Pearson IC 序列
+# 手算：每个截面内，因子值与未来收益的相关系数
 ics = []
-for d in expo.index[:-20]:
-    x = expo.loc[d]
-    y = fwd.loc[d]
-    mask = x.notna() & y.notna()
-    if mask.sum() >= 20:
-        ics.append(np.corrcoef(x[mask], y[mask])[0, 1])
-ics = pd.Series(ics)
+for date in f.index:
+    a, b = f.loc[date], fwd.loc[date]
+    ok = a.notna() & b.notna()
+    if ok.sum() > 10:
+        ics.append(np.corrcoef(a[ok], b[ok])[0, 1])
+ics = np.array(ics)
+print(f"手算 IC均值={ics.mean():.4f}  IC标准差={ics.std():.4f}  ICIR={ics.mean()/ics.std():.3f}")
+print("IC 为正的比例:", round((ics > 0).mean(), 4))
 
-ic_mean = ics.mean()
-ic_std = ics.std()
-icir = ic_mean / ic_std
-t_stat = icir * np.sqrt(len(ics))
-print(f"IC均值={ic_mean:.4f}  IC标准差={ic_std:.4f}  ICIR={icir:.3f}  t={t_stat:.2f}")
-print("IC 为正的比例:", (ics > 0).mean())
-
-# 与平台结果对账
-print("lab.ic        :", lab.ic(name, horizon=20))
-print("lab.ic_series :", lab.ic_series(name).tail())
-print("lab.report    :", lab.report(name))
+# 与平台对账
+print("平台 IC:", lab.ic("mom_12_1", horizon=20))
+print("平台结论:", lab.report("mom_12_1")["verdict"])
 ```
 
-手工复现一遍 IC 是理解定义的最好方式，也是排查"平台 IC 为何与自己算的不同"的标准手段——绝大多数差异来自对齐方式（`shift(-20)` 的方向）与有效样本数的阈值。
+我实跑的结果：
 
-## 常见坑
+```
+手算 IC均值=0.0392  IC标准差=0.1319  ICIR=0.298
+IC 为正的比例: 0.6410
+平台 IC: ICSeries(mean=0.0287, n=1557)
+平台结论: 通过：可以考虑进入组合（仍需样本外验证）
+```
 
-1. **对齐方向写反**：`shift(20)` 与 `shift(-20)` 的差别就是"用过去收益"和"用未来收益"，前者会得到虚假的高 IC。
-2. **持有期重叠未修正**：horizon 大于调仓间隔时，IC 序列自相关，t 值被高估，必须用 Newey-West 或非重叠采样。
-3. **样本量阈值过低**：每期只有十几只有效样本时算出的 IC 噪声极大，应设最低样本数（如 ≥ 20~30）。
-4. **只看均值不看时间序列**：IC 均值可能被个别极端期主导，应同时看 IC 序列图、正比例与分年 IC。
-5. **幸存者偏差**：只用当前仍在市的成分股算历史 IC，会系统性高估因子表现。
-6. **用合成数据的结论外推**：`generate_demo_market` 的因子效应由构造决定，只用于验证代码正确性。
+**三个读点：**
 
-## 延伸阅读
+1. **手算 0.0392 vs 平台 0.0287，不一样**——因为手算每 20 日取一个截面、用简单未来收益；平台对每个交易日、用更完整的对齐与清洗。**口径不同，数字就不同**：这不是谁错，是 02-01 讲的"口径一致"有多重要。
+2. **ICIR = 0.298**：平均准头 0.0392，但标准差 0.1319（抖得厉害）。**"准"和"稳"是两件事**，这里稳得很一般。
+3. **只有 64.1% 的截面 IC 为正**：意味着约**三分之一的时间这个因子是反向的**。01-02 里逐年 IC 出现 2022/2023 为负，说的就是这件事。
 
-- Grinold, R. C. & Kahn, R. N., Active Portfolio Management
-- Jegadeesh, N. & Titman, S. (1993), Returns to Buying Winners and Selling Losers
-- Fama, E. F. & MacBeth, J. D. (1973), Risk, Return, and Equilibrium: Empirical Tests
+> ⚠️ 代码里 `fwd = close.shift(-20)/close - 1` 用了 `shift(-1)` 方向的未来数据——
+> **这是合法的，因为它只用来算"未来收益"这个标签，绝不进入特征**（02-04、02-07 反复强调过）。
+> 一旦你把它混进 `f`，就是前视偏差。**同一个符号，用在标签里是对的，用在特征里是作弊。**
+
+---
+
+## 六、把这一篇串起来
+
+回到 Grinold 与 Kahn 那条定律。
+
+它把"因子检验"这件事放到了一个更大的框架里：**IC 只是乘号左边的那一项**。一个 IC 0.03 的弱因子，配足够大的广度（多股票、多频率、多低相关因子合成），照样能撑起一套策略；而一个 IC 0.10 却只敢偶尔下注的"神预测"，反而不如它。
+
+> 所以检验一个因子，从来不是问"它够不够强"，而是问两件事：
+> **准不准（IC）？稳不稳（ICIR）？** 以及后面 05-07 会补的第三件：**能持续多久（衰减）**。
+
+> 一句话收尾：
+> **IC 告诉你"这次猜对了吗"，ICIR 告诉你"下次还敢猜吗"。**
+> 一个只能回答第一个问题的因子，不配进实盘。
+
+---
 
 ## 动手练习
 
-- 用 np.corrcoef 手算 mom_12_1 的 IC 序列，与 lab.ic_series 对账
-- 对同一因子分别算 horizon=5/20/60 的 IC，观察衰减方向
+- 跑一遍上面的代码，把 `horizon=20` 改成 `5` 和 `60`，看 IC 与 ICIR 怎么变。**先猜，再跑。**
+- 把 `fwd` 那行的 `shift(-20)` 误改成 `shift(20)`（变成过去收益），看 IC 变成什么。想想：为什么这个数"看着也挺合理"，却完全不能用来下注？
+- 用一句话解释："IC 为正"和"这个策略能赚钱"之间，还隔着哪几道关？（提示：03-04 成本、05-06 单调性）
+
+## 延伸阅读
+
+- Grinold & Kahn,《Active Portfolio Management》, 2nd ed., McGraw-Hill, 1999（[Google Books 书目](https://books.google.com.sg/books?id=w-91gw-2JD4C)）——基本定律的出处；**首版年份与公式一手页存疑**。
+- [Corporate Finance Institute: Fundamental Law of Active Management](https://corporatefinanceinstitute.com/resources/capital_markets/fundamental-law-of-active-management/)——IR = IC × √BR 的通行转引。
+- Fama & MacBeth (1973), "Risk, Return, and Equilibrium", *JPE* 81(3): 607–636——"逐期估斜率、再看斜率序列的均值/t 值"，与 IC/ICIR 同构。
+- [05-06 分层回测](./05-06-分层回测.md)——IC 之后的第二道筛子。
