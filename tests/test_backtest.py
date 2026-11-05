@@ -246,3 +246,25 @@ def test_benchmark_aligned(md_small):
     assert res.benchmark is not None
     assert len(res.benchmark) == len(res.equity)
     assert "beta" in res.metrics and "alpha" in res.metrics
+
+
+def test_bollinger_n_std_actually_matters():
+    """bollinger_reversion 的 n_std 必须真的影响结果。
+
+    回归测试：早期实现只按 z 值排序取 top_k，完全没有用到 n_std——
+    参数扫描会得到一排一模一样的数字，使用者却会误以为"这个参数不敏感"。
+    参数不生效比参数调错更危险：它安静地骗你。
+    """
+    from qd.data.synthetic import generate_demo_market
+    from qd.strategy.builtin import bollinger_reversion
+
+    md = generate_demo_market(n_symbols=30, start="2020-01-01", end="2022-12-31", seed=1)
+    counts = []
+    for n_std in (1.0, 2.0, 3.0):
+        res = Backtest(md, bollinger_reversion(window=20, n_std=n_std),
+                       BacktestConfig(initial_cash=1_000_000)).run()
+        counts.append(len(res.trades))
+
+    assert len(set(counts)) > 1, f"n_std 似乎没有生效，各档成交笔数完全相同：{counts}"
+    # 门槛越宽（n_std 越大），触发的交易应该越少
+    assert counts[0] >= counts[-1], f"n_std 越大成交反而更多，逻辑可疑：{counts}"

@@ -306,8 +306,12 @@ def bollinger_reversion(window: int = 20, n_std: float = 2.0, top_k: int = 10) -
                 ma = np.nanmean(seg, axis=0)
                 sd = np.nanstd(seg, axis=0, ddof=1)
                 z = (arr[i] - ma) / np.where(sd > 0, sd, np.nan)
-            # 只在有效标的中取 z 最小（最超卖）的 top_k
-            return long_top_weights(-z, top_k)
+            # 只用"跌破下轨"（z < -n_std）的标的，再按超卖程度取前 top_k。
+            # 之前的实现忽略了 n_std，导致该参数完全不生效——
+            # 参数不生效的 bug 特别阴险：参数扫描会得到一排完全相同的数字，
+            # 而使用者会误以为"这个参数不敏感"。
+            score = np.where(z < -abs(n_std), -z, -np.inf)
+            return long_top_weights(pd.Series(score, index=ctx.md.symbols), top_k)
 
     return _S()
 
