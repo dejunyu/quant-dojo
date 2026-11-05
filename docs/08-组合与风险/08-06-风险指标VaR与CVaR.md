@@ -13,130 +13,215 @@ api: [qd.metrics.perf.value_at_risk, qd.metrics.perf.conditional_var]
 
 ## 学完这一篇，你能做到
 
-- 准确写出 VaR 与 CVaR 的定义并说明二者关系
-- 能用历史模拟、参数法、蒙特卡洛三种方法计算 VaR
-- 知道 VaR 不满足次可加性，以及为什么要改用 CVaR
+- 用一句话说清 VaR 在回答什么问题，以及它**没回答**什么
+- 分清 VaR 的三种算法（历史/正态/Cornish-Fisher），知道各自在假设什么
+- 理解为什么 **VaR 不是"一致风险度量"**，而 CVaR 是
+- 用平台算一遍 VaR/CVaR，并读懂"尾部比"
 
 ## 本篇要点
 
-- $VaR_\alpha=\inf\{l:P(L>l)\le 1-\alpha\}$，只给出阈值不给尾部深度
-- $CVaR_\alpha=\mathbb{E}[L\mid L\ge VaR_\alpha]$，是**一致风险度量**
-- VaR 不满足次可加性：$VaR(A+B)$ 可能大于 $VaR(A)+VaR(B)$
+- VaR：**"有 X% 的把握，明天最多亏这么多"**——但它不说"超过之后会亏多少"
+- CVaR（期望短缺）：**"如果真超了，平均会亏多少"**
+- **VaR 不满足次可加性**：分散化可能让它变大，这是致命的
+- ⚠️ 参数 `alpha` 是**尾部概率**（99% 置信 → 0.01），传反了结果全错
 
-VaR（Value at Risk，在险价值）是过去三十年金融机构最常用的风险数字，也是被批评最多的。理解它的定义、算法与缺陷，是风险管理入门的必修课。
+---
 
-## 一、定义
+## 一、从"一个数字管住整个交易台"说起
 
-给定置信水平 $\alpha$（如 0.99）与持有期 $h$（如 1 天），令 $L$ 为该期间的**损失**（正数为亏）。VaR 是这样一个阈值：
+1990 年代，**J.P. 摩根**的风险管理部门做了一件后来影响整个行业的事：他们开发了一套叫 **RiskMetrics** 的方法，用一个数字来回答老板们最关心的问题：
 
-$$VaR_\alpha = \inf\big\{l:\ P(L>l)\le 1-\alpha\big\}$$
+> **"我们明天最多可能亏多少？"**
 
-等价写法：$VaR_\alpha = F_L^{-1}(\alpha)$，即损失分布的 $\alpha$ 分位数。它的通俗表述是"在 $\alpha$ 的日子里，损失不会超过 $VaR_\alpha$"。
+这个数字就是 **VaR（Value at Risk，在险价值）**。
 
-**CVaR**（Conditional VaR，又称 Expected Shortfall、Expected Tail Loss）：
+它的定义极简洁：
 
-$$CVaR_\alpha = \mathbb{E}\big[L \mid L \ge VaR_\alpha\big]$$
+> **在给定的置信水平和持有期内，损失不会超过某个值的概率。**
 
-即"一旦真的突破 VaR，平均会亏多少"。
+比如："**95% 置信、1 天持有期，VaR = 100 万**"——意思是：
+**明天有 95% 的概率，亏损不超过 100 万。**
 
-二者关系：$CVaR_\alpha = \frac{1}{1-\alpha}\int_\alpha^1 VaR_u\,du$，所以 CVaR 是 VaR 在尾部区间上的平均，恒有 $CVaR_\alpha \ge VaR_\alpha$。
+1994 年，J.P. 摩根把 RiskMetrics 的方法和数据**公开**了，随后它成了银行业风险管理的通用语言，并进入了巴塞尔协议。(RiskMetrics 的技术文档原本叫 *RiskMetrics Technical Document*，1994 年首发，后续多次更新。)
 
-举例：某组合 99% 单日 VaR = 200 万，99% CVaR = 450 万。含义是：每 100 天里大约有 1 天亏损超过 200 万，而那些"坏日子"的平均亏损是 450 万。**只看 VaR 会严重低估风险**，这正是 2008 年后监管（巴塞尔 III FRTB）把内部模型从 VaR 换成 ES 的原因。
+> **VaR 之所以流行，是因为它极其"好沟通"。**
+> 它把一个多维的、复杂的风险，压缩成了**一个数字 + 一个置信度**。
+> 老板听得懂，监管能对比，交易员有指标。
+>
+> **但它也正因为"压缩成一个数字"，丢掉了一样最要命的东西：**
+> **超过 VaR 之后，会亏多少？**
 
-## 二、三种计算方法
+**这正是本篇的全部张力。** VaR 告诉你"门有多高"，但不告诉你"门外有多深"。
 
-### 1. 历史模拟法
+---
 
-直接用过去 $T$ 天的实际损益序列，取经验分位数：
+## 二、VaR 的三种算法（逐个讲透）
 
-$$VaR_\alpha = -\text{quantile}_\alpha\big(\{r_t\}_{t=1}^{T}\big) \times V$$
+$$ \mathrm{VaR}_\alpha = \text{收益率分布的 } \alpha \text{ 分位数（取绝对值）} $$
 
-- 优点：无需分布假设，自动保留厚尾、偏态与相关性结构。
-- 缺点：完全依赖历史样本，**无法预测从未出现过的事件**；样本尾部点极少（99% VaR 在 250 天样本里只用到了第 2.5 个最坏观测）；窗口选择主观。
+| 方法 | 怎么做 | 假设 | 缺点 |
+| --- | --- | --- | --- |
+| **历史法** | 直接取历史收益的 $\alpha$ 分位 | 不假设分布 | 对样本期极敏感 |
+| **正态法** | 用 $\mu + z_\alpha \sigma$ 算 | **收益服从正态** | 04-02 讲过：严重低估尾部 |
+| **Cornish-Fisher** | 用偏度、峰度修正分位数 | 近似厚尾 | 极端情况下也不稳 |
 
-### 2. 参数法（方差-协方差法）
+> ⚠️ **一个必须说清的参数陷阱**（这也是我第一次跑这篇代码时踩的坑）：
+> `alpha` 是**尾部概率**，不是置信度。
+> **95% 置信 → `alpha=0.05`；99% 置信 → `alpha=0.01`。**
+>
+> 传成 0.95/0.99 的话，取到的是**右尾分位**（最赚钱的那一端），
+> 算出来的 VaR 会接近 0，而 CVaR 甚至可能变成正数——**结果完全失去意义，却不报错**。
+>
+> **又一次"安静地错"。**
 
-假设收益正态，$\sigma$ 为组合日波动率：
+---
 
-$$VaR_\alpha = V\cdot\big(\mu_h - z_{1-\alpha}\,\sigma_h\big),\qquad CVaR_\alpha=V\cdot\Big(\mu_h-\sigma_h\frac{\phi(z_{1-\alpha})}{1-\alpha}\Big)$$
+## 三、VaR 的根本缺陷：不是一致风险度量（单独讲透）
 
-其中 $\phi$ 是标准正态密度，正态下尾部条件期望有闭式解。1 天 99% 的 $z_{0.01}=-2.326$，$\phi(z_{0.01})/0.01=0.2666$。
+这是本篇最重要的一节。
 
-- 优点：计算快，可用于大规模组合与实时风控。
-- 缺点：**正态假设严重低估尾部**。真实金融收益尖峰厚尾，极端事件的频率远高于正态预测。改进方式是用 Student-$t$（自由度 3~5）或 Cornish-Fisher 展开修正偏度与峰度。
+风险管理学界对"什么是一个好的风险度量"提出了四条要求。**1999 年，Artzner、Delbaen、Eber 与 Heath 在《数学金融》上发表《一致性风险度量》，正式提出"一致风险度量"（coherent risk measure）的四条公理**，并明确指出：**分位数类的度量（也就是 VaR）不满足其中的次可加性。**（*Mathematical Finance* 9(3): 203–228）
 
-### 3. 蒙特卡洛法
+四条公理里，最关键的一条是：
 
-指定收益的生成过程（如多元 $t$ 分布、GARCH、Copula 或因子模型），模拟 $M$ 条路径得到组合损益分布，取分位数。
+> **次可加性（sub-additivity）**：
+> **合并两个组合的风险，不应该大于各自风险之和。**
+>
+> 也就是：**分散化不该让风险变大。**
 
-- 优点：可以处理非线性资产（期权、可转债）、路径依赖，并可以叠加任意分布假设。
-- 缺点：计算慢、模型风险大（结果取决于你假设的生成过程）、需要固定随机种子保证可复现。
+$$ \rho(A + B) \le \rho(A) + \rho(B) $$
 
-| 方法 | 分布假设 | 非线性资产 | 计算成本 | 主要风险 |
-| --- | --- | --- | --- | --- |
-| 历史模拟 | 无 | 差（需重估） | 低 | 样本外事件 |
-| 参数法 | 正态/t | 差 | 极低 | 厚尾低估 |
-| 蒙特卡洛 | 自定义 | 好 | 高 | 模型设定错误 |
+**VaR 违反了这一条。**
 
-## 三、VaR 的根本缺陷：不是一致风险度量
+> **怎么可能？** 举个能感受到的例子：
+> 两个策略各自独立，每个都有 4% 的概率亏 100 万、96% 概率不亏。
+> **单独看**：95% 置信下，VaR ≈ 0（因为 95% 的时间不亏）。
+> **合在一起**：只要有一个亏，你就亏 100 万——概率变成约 8%，**超过 5%**，
+> 于是 95% 的 VaR 变成 100 万。
+>
+> **两个"零风险"的策略，合起来"有风险"。** 这在风控上是荒谬的结论。
 
-Artzner、Delbaen、Eber 与 Heath（1999）提出**一致风险度量（coherent risk measure）**应满足四条公理：单调性、次可加性、正齐次性、平移不变性。
+**CVaR（也叫 Expected Shortfall，期望短缺）就没有这个问题**：
 
-VaR **不满足次可加性**：
+$$ \mathrm{CVaR}_\alpha = \mathbb{E}[\,L \mid L > \mathrm{VaR}_\alpha\,] $$
 
-$$VaR(A+B) \not\le VaR(A)+VaR(B)$$
+| 符号 | 白话 |
+| --- | --- |
+| $L$ | 损失 |
+| $L > \mathrm{VaR}_\alpha$ | **只挑出"超过 VaR 的那些坏日子"** |
+| 整个式子 | **那些坏日子的平均损失是多少** |
 
-这意味着：分散化在 VaR 的度量下可能"增加风险"，甚至出现"两个子柜台的 VaR 之和小于总组合 VaR"的荒谬结论，从而诱发监管套利。CVaR 满足全部四条公理，是一致风险度量，且是凸的，便于放进优化问题（Rockafellar & Uryasev 2000 给出了用线性规划求解 CVaR 最小组合的经典方法）。
+> **CVaR 回答的正是 VaR 回避的问题：门外有多深。**
+> 而且它**满足次可加性**——所以它是"一致风险度量"，VaR 不是。
+>
+> **这就是为什么巴塞尔协议在 2010 年代逐渐把市场风险的内部模型从 VaR 转向 ES（CVaR）。**
+> 不是 VaR 算错了，是它**在数学上就不适合用来做分散化决策**。
 
-其他局限：
+---
 
-- **只给阈值不给深度**：VaR 完全不区分"刚好突破"与"亏光"。
-- **对尾部估计极不稳定**：$\alpha$ 越高，用到的样本越少，估计方差越大。99.9% 的 VaR 在实务上几乎无法从历史数据可靠估计。
-- **不度量流动性风险**：危机时买卖价差扩大、无法成交，VaR 假设可以按市价平仓。
-- **不度量内生流动性/反馈**：多家机构同时止损会造成螺旋，VaR 假设头寸不影响价格。
-- **回测 VaR 本身很难**：突破事件稀少，Kupiec 检验（1995）统计量功效很低。
+## 四、用平台算一遍
 
-## 四、代码示例
+按 [00-开始之前](../01-入门/00-开始之前.md) 装好环境，把下面这段存成文件跑一次：
 
 ```python
+import warnings
+warnings.filterwarnings("ignore")
 import numpy as np
+import pandas as pd
 from qd.data.synthetic import generate_demo_market
 from qd.metrics.perf import value_at_risk, conditional_var, max_drawdown, ulcer_index
 
 md = generate_demo_market(n_symbols=40, start="2018-01-01", end="2024-12-31", seed=7)
-rets = md.returns().dropna()
-port = rets.mean(axis=1).values           # 等权组合日收益（近似）
+port = md.returns().dropna().mean(axis=1).values
 
-for alpha in (0.95, 0.99):
-    var_h = value_at_risk(port, alpha=alpha, method="historical")
-    cvar_h = conditional_var(port, alpha=alpha, method="historical")
-    var_n = value_at_risk(port, alpha=alpha, method="parametric")
-    cvar_n = conditional_var(port, alpha=alpha, method="parametric")
-    print("alpha=%.2f  历史法 VaR=%.3f%% CVaR=%.3f%% | 正态法 VaR=%.3f%% CVaR=%.3f%%"
-          % (alpha, var_h*100, cvar_h*100, var_n*100, cvar_n*100))
+# 注意 alpha 是「尾部概率」，不是「置信度」
+for conf in (0.95, 0.99):
+    a = 1 - conf
+    var_h = value_at_risk(port, alpha=a, method="historical")
+    cvar_h = conditional_var(port, alpha=a, method="historical")
+    var_n = value_at_risk(port, alpha=a, method="parametric")
+    cvar_n = conditional_var(port, alpha=a, method="parametric")
+    print("置信 %.0f%%  历史法 VaR=%.3f%% CVaR=%.3f%% | 正态法 VaR=%.3f%% CVaR=%.3f%%"
+          % (conf*100, var_h*100, cvar_h*100, var_n*100, cvar_n*100))
 
-# 尾部厚度自检：正态下 99% CVaR/VaR 应约为 1.15，实际偏大即为厚尾
-print("尾部比 CVaR/VaR =", round(conditional_var(port, 0.99) / value_at_risk(port, 0.99), 2))
-print("最大回撤 %.2f%%  Ulcer %.2f" % (max_drawdown(port)*100, ulcer_index(port)))
+# 尾部比：正态下 99% 的 CVaR/VaR 约为 1.15，偏大即为厚尾
+print("尾部比 CVaR/VaR =", round(conditional_var(port, 0.01) / value_at_risk(port, 0.01), 3))
+
+# 回撤类指标吃的是净值，不是收益率
+nav = (1 + pd.Series(port)).cumprod()
+print("最大回撤 %.2f%%  Ulcer %.2f" % (max_drawdown(nav)*100, ulcer_index(nav)))
 ```
 
-## 常见坑
+我实跑的结果：
 
-- **把历史 VaR 当预测**：它是"过去分布的描述"，不是前瞻风险。应配合压力测试与情景分析。
-- **只看 VaR 不看 CVaR**：尤其在含期权、可转债、或小概率大额亏损策略上。
-- **忽略波动率聚集**：用全样本恒定 $\sigma$ 会低估危机期风险。建议用 EWMA 或 GARCH 得到条件波动率再算 VaR。
-- **用日 VaR 直接乘 $\sqrt{h}$**：平方根法则只在收益独立同分布时成立；存在自相关（波动率聚集）时会低估多日风险。
-- **回测突破次数说不清**：样本内 250 天、99% VaR，期望突破次数只有 2.5 次，多一次少一次都在噪声范围内。要用足够长样本与 [净化切分](../10-机器学习/10-03-金融数据的交叉验证.md) 思维。
+```
+置信 95%  历史法 VaR=1.720% CVaR=2.116% | 正态法 VaR=1.733% CVaR=2.129%
+置信 99%  历史法 VaR=2.392% CVaR=2.692% | 正态法 VaR=2.467% CVaR=2.792%
+尾部比 CVaR/VaR = 1.125
+最大回撤 -45.38%  Ulcer 19.12
+```
 
-## 延伸阅读
+**四个读点：**
 
-- Philippe Artzner, Freddy Delbaen, Jean-Marc Eber & David Heath (1999), *Coherent Measures of Risk*, Mathematical Finance
-- R. Tyrrell Rockafellar & Stanislav Uryasev (2000), *Optimization of Conditional Value-at-Risk*, Journal of Risk
-- R. Tyrrell Rockafellar & Stanislav Uryasev (2002), *Conditional Value-at-Risk for General Loss Distributions*, Journal of Banking & Finance
-- Paul Kupiec (1995), *Techniques for Verifying the Accuracy of Risk Measurement Models*, Journal of Derivatives
-- Philippe Jorion (2006), *Value at Risk: The New Benchmark for Managing Financial Risk*, 3rd ed., McGraw-Hill
+**第一，CVaR 永远大于 VaR**（2.69% > 2.39%）。这符合定义：**门外的平均深度，总比门的门槛深。**
+
+**第二，正态法与历史法很接近**（1.720% vs 1.733%）。这说明这份合成数据的分布**接近正态**，厚尾不严重。
+
+**第三，尾部比 1.125**，非常接近理论值 1.15。**所以这里没有明显厚尾。**
+
+> **如果换成真实 A 股数据，这个比值会明显偏大**（04-02 里 `|r|>4σ` 实际 1 次、正态期望 0.12 次）。
+> **那时正态法算出的 VaR 会显著低估**——而 08-06 这个数字，正是风控限额的依据。
+
+**第四，VaR 和最大回撤差得很远**：99% 的日 VaR 只有 2.39%，而**最大回撤 -45.38%**。
+
+> **这两个数字不能互相替代。**
+> VaR 是"**单日**的典型坏日子"，回撤是"**累积**的最差旅程"。
+> 一天亏 2.4% 很常见，连亏 20 天就是 -40%——**VaR 完全看不见这种"温水煮青蛙"**。
+
+---
+
+## 五、三个指标的正确用法
+
+| 指标 | 回答什么 | 什么时候用 |
+| --- | --- | --- |
+| **VaR** | 单日损失的"门槛" | 日常限额、监管报告 |
+| **CVaR** | 超过门槛后的平均深度 | **风控决策、分散化判断** |
+| **最大回撤** | 最差的累积旅程 | 投资者沟通、心理承受力 |
+
+> **一句话总结三者的分工：**
+> **VaR 是"红线有多高"，CVaR 是"红线外面有多深"，回撤是"掉下去之后要爬多久"。**
+> **三个都看，才是一个完整的风险画像。**
+
+---
+
+## 六、把这一篇串起来
+
+回到 J.P. 摩根那套 RiskMetrics。
+
+它把风险压缩成一个数字，让整个行业第一次能用统一语言谈风险。这是巨大的进步。但也埋下了一个陷阱：**数字越简洁，越容易被当成"全部"。**
+
+> 而 VaR 的失败方式特别优雅：
+> **它在 95% 的日子里都是对的。**
+> 你每天用它做限额，一千天里九百五十天它都显得很称职。
+> **然后在第 951 天，你发现门外的深度是门内的十倍。**
+
+> 这和 04-02 讲正态分布、03-05 讲流动性消失、01-01 讲火鸡寓言，是同一条线：
+> **用"平常日子"的统计，去防"不平常的那一天"。**
+
+> 一句话收尾：
+> **VaR 告诉你"通常不会亏多少"，CVaR 告诉你"真亏起来会亏多少"。**
+> 而风控的价值，永远在后者。
+
+---
 
 ## 动手练习
 
-- 用同一组合分别以历史法/正态法/t 分布法算 99% VaR，比较差异
-- 构造两个厚尾分布的组合，验证 VaR 违反次可加性而 CVaR 不违反
+- 跑一遍上面的代码，**故意把 `alpha` 传成 `0.95`**，看结果如何荒谬。这就是本节强调的参数陷阱。
+- 把 `port` 换成单只股票（`md.returns().iloc[:, 0].values`），看尾部比怎么变。**先猜：个股的厚尾更严重吗？**
+- 用一句话解释："为什么 VaR 不满足次可加性，会让分散化决策变得荒谬？"
+
+## 延伸阅读
+
+- Artzner, P., Delbaen, F., Eber, J.-M. & Heath, D. (1999), "Coherent Measures of Risk", *Mathematical Finance* 9(3): 203–228——一致性风险度量与次可加性。
+- J.P. Morgan / Reuters (1994), *RiskMetrics Technical Document*——VaR 工业化的起点。
+- [04-02 分布厚尾](../04-统计与建模/04-02-分布厚尾与正态性.md)——正态假设为什么会低估尾部。
